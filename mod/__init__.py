@@ -1,4 +1,4 @@
-"""MagicNodes.mod package
+"""MagicNodes.src package
 
 Holds the primary node implementations after repo cleanup. Keeping this as a
 package ensures stable relative imports from the project root.

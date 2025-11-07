@@ -1,6 +1,6 @@
 """
 Simple latent generator for ComfyUI.
-The ``MagicSeedLatent`` class creates a random latent tensor of the specified size.
+The ``MG_SeedLatent`` class creates a random latent tensor of the specified size.
 If ``mix_image`` is enabled, the input image is encoded with a VAE and mixed with noise.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 import torch
 
 
-class MagicSeedLatent:
+class MG_SeedLatent:
     """Generate a latent tensor with optional image mixing."""
 
     @classmethod

@@ -1,28 +1,34 @@
 """Adaptive sampler helper node (moved to mod/).
 
-Keeps class/key name AdaptiveSamplerHelper for backward compatibility.
+Keeps class/key name MG_AdaptiveSamplerHelper for backward compatibility.
 """
 
 import numpy as np
 from scipy.ndimage import laplace
 
 
-class AdaptiveSamplerHelper:
+class MG_AdaptiveSamplerHelper:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "image": ("IMAGE", {}),
                 "steps": ("INT", {"default": 20, "min": 1, "max": 200}),
-                "cfg": ("FLOAT", {"default": 7.0, "min": 0.1, "max": 20.0, "step": 0.1}),
-                "denoise": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "cfg": (
+                    "FLOAT",
+                    {"default": 7.0, "min": 0.1, "max": 20.0, "step": 0.1},
+                ),
+                "denoise": (
+                    "FLOAT",
+                    {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01},
+                ),
             }
         }
 
     RETURN_TYPES = ("INT", "FLOAT", "FLOAT")
     RETURN_NAMES = ("steps", "cfg", "denoise")
     FUNCTION = "tune"
-    CATEGORY = "MagicNodes"
+    CATEGORY = "MagicNodes/advanced"
 
     def tune(self, image, steps, cfg, denoise):
         img = image[0].cpu().numpy()
@@ -36,4 +42,3 @@ class AdaptiveSamplerHelper:
         tuned_denoise = float(np.clip(denoise + (0.5 - brightness), 0.0, 1.0))
 
         return (tuned_steps, tuned_cfg, tuned_denoise)
-

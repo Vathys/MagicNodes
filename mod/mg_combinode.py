@@ -11,7 +11,7 @@ import os
 import json
 import re
 
-from .hard.mg_upscale_module import clear_gpu_and_ram_cache
+from .mg_utils import clear_gpu_and_ram_cache
 
 # Module level caches to reuse loaded models and LoRAs between invocations
 _checkpoint_cache = {}
@@ -26,9 +26,7 @@ def _clear_unused_loras(active_names):
     for n in unused:
         del _lora_cache[n]
     if unused:
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        clear_gpu_and_ram_cache()
 
 
 def _load_checkpoint(path):
@@ -50,14 +48,11 @@ def _unload_old_checkpoint(current_path):
     global _loaded_checkpoint
     if _loaded_checkpoint and _loaded_checkpoint != current_path:
         _checkpoint_cache.pop(_loaded_checkpoint, None)
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        clear_gpu_and_ram_cache()
     _loaded_checkpoint = current_path
 
 
-
-class MagicNodesCombiNode:
+class MG_CombiNode:
     @classmethod
     def INPUT_TYPES(cls):
         def _loras_with_none():
@@ -68,114 +63,319 @@ class MagicNodesCombiNode:
 
         return {
             "required": {
-            
-
-
-            # --- Checkpoint ---
-            "use_checkpoint": ("BOOLEAN", {"default": True}),
-            "checkpoint": (folder_paths.get_filename_list("checkpoints"), {}),
-            "clear_cache": ("BOOLEAN", {"default": False}),
-
-            # --- LoRA 1 ---
-            "use_lora_1": ("BOOLEAN", {"default": True}),
-            "lora_1": (_loras_with_none(), {}),
-            "strength_model_1": ("FLOAT", {"default": 1.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-            "strength_clip_1": ("FLOAT", {"default": 1.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-
-            # --- LoRA 2 ---
-            "use_lora_2": ("BOOLEAN", {"default": False}),
-            "lora_2": (_loras_with_none(), {}),
-            "strength_model_2": ("FLOAT", {"default": 0.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-            "strength_clip_2": ("FLOAT", {"default": 0.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-
-            # --- LoRA 3 ---
-            "use_lora_3": ("BOOLEAN", {"default": False}),
-            "lora_3": (_loras_with_none(), {}),
-            "strength_model_3": ("FLOAT", {"default": 0.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-            "strength_clip_3": ("FLOAT", {"default": 0.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-
-            # --- LoRA 4 ---
-            "use_lora_4": ("BOOLEAN", {"default": False}),
-            "lora_4": (_loras_with_none(), {}),
-            "strength_model_4": ("FLOAT", {"default": 0.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-            "strength_clip_4": ("FLOAT", {"default": 0.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-
-            # --- LoRA 5 ---
-            "use_lora_5": ("BOOLEAN", {"default": False}),
-            "lora_5": (_loras_with_none(), {}),
-            "strength_model_5": ("FLOAT", {"default": 0.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-            "strength_clip_5": ("FLOAT", {"default": 0.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-
-            # --- LoRA 6 ---
-            "use_lora_6": ("BOOLEAN", {"default": False}),
-            "lora_6": (_loras_with_none(), {}),
-            "strength_model_6": ("FLOAT", {"default": 0.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
-            "strength_clip_6": ("FLOAT", {"default": 0.0, "min": -1.5, "max": 1.5, "step": 0.01,}),
+                # --- Checkpoint ---
+                "use_checkpoint": ("BOOLEAN", {"default": True}),
+                "checkpoint": (folder_paths.get_filename_list("checkpoints"), {}),
+                "clear_cache": ("BOOLEAN", {"default": False}),
+                # --- LoRA 1 ---
+                "use_lora_1": ("BOOLEAN", {"default": True}),
+                "lora_1": (_loras_with_none(), {}),
+                "strength_model_1": (
+                    "FLOAT",
+                    {
+                        "default": 1.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                "strength_clip_1": (
+                    "FLOAT",
+                    {
+                        "default": 1.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                # --- LoRA 2 ---
+                "use_lora_2": ("BOOLEAN", {"default": False}),
+                "lora_2": (_loras_with_none(), {}),
+                "strength_model_2": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                "strength_clip_2": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                # --- LoRA 3 ---
+                "use_lora_3": ("BOOLEAN", {"default": False}),
+                "lora_3": (_loras_with_none(), {}),
+                "strength_model_3": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                "strength_clip_3": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                # --- LoRA 4 ---
+                "use_lora_4": ("BOOLEAN", {"default": False}),
+                "lora_4": (_loras_with_none(), {}),
+                "strength_model_4": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                "strength_clip_4": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                # --- LoRA 5 ---
+                "use_lora_5": ("BOOLEAN", {"default": False}),
+                "lora_5": (_loras_with_none(), {}),
+                "strength_model_5": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                "strength_clip_5": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                # --- LoRA 6 ---
+                "use_lora_6": ("BOOLEAN", {"default": False}),
+                "lora_6": (_loras_with_none(), {}),
+                "strength_model_6": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
+                "strength_clip_6": (
+                    "FLOAT",
+                    {
+                        "default": 0.0,
+                        "min": -1.5,
+                        "max": 1.5,
+                        "step": 0.01,
+                    },
+                ),
             },
             "optional": {
-            "model_in": ("MODEL", {}),
-            "clip_in": ("CLIP", {}),
-            "vae_in": ("VAE", {}),
-
-            # --- Prompts --- (controlled dynamic expansion inside node for determinism)
-            "positive_prompt": ("STRING", {"multiline": True, "default": "", "dynamicPrompts": False}),
-            "negative_prompt": ("STRING", {"multiline": True, "default": "", "dynamicPrompts": False}),
-
-            # Optional external conditioning (bypass internal text encode)
-            "positive_in": ("CONDITIONING", {}),
-            "negative_in": ("CONDITIONING", {}),
-
-            # --- CLIP Layers ---
-            "clip_set_last_layer_positive": ("INT", {"default": -2, "min": -20, "max": 0}),
-            "clip_set_last_layer_negative": ("INT", {"default": -2, "min": -20, "max": 0}),
-
-            # --- Recipes ---
-            "recipe_slot": (["Off", "Slot 1", "Slot 2", "Slot 3", "Slot 4"], {"default": "Off", "tooltip": "Choose slot to save/load assembled setup."}),
-            "recipe_save": ("BOOLEAN", {"default": False, "tooltip": "Save current setup into the selected slot."}),
-            "recipe_use": ("BOOLEAN", {"default": False, "tooltip": "Load and apply setup from the selected slot for this run."}),
-
-            # --- Standard pipeline (match classic node order for CLIP) ---
-            "standard_pipeline": ("BOOLEAN", {"default": False, "tooltip": "Use vanilla order for CLIP: Set Last Layer -> Load LoRA -> Encode (same CLIP logic as standard ComfyUI)."}),
-
-            # CLIP LoRA gains per branch (effective only when standard_pipeline=true)
-            "clip_lora_pos_gain": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 3.0, "step": 0.01, "tooltip": "Multiplier for CLIP-LoRA strength on positive branch (standard pipeline)."}),
-            "clip_lora_neg_gain": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 3.0, "step": 0.01, "tooltip": "Multiplier for CLIP-LoRA strength on negative branch (standard pipeline)."}),
-
-            # Deterministic dynamic prompts
-            "dynamic_pos": ("BOOLEAN", {"default": False, "tooltip": "Deterministically expand choices in positive prompt (uses dyn_seed)."}),
-            "dynamic_neg": ("BOOLEAN", {"default": False, "tooltip": "Deterministically expand choices in negative prompt (uses dyn_seed)."}),
-            "dyn_seed": ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFF, "tooltip": "Seed for dynamic prompt expansion (same seed used for both prompts)."}),
-            "dynamic_break_freeze": ("BOOLEAN", {"default": True, "tooltip": "If enabled, do not expand choices before the first |BREAK| marker; dynamic applies only after it."}),
-            "show_expanded_prompts": ("BOOLEAN", {"default": False, "tooltip": "Print expanded Positive/Negative prompts to console when dynamic is enabled."}),
-            "save_expanded_prompts": ("BOOLEAN", {"default": False, "tooltip": "Save expanded prompts to mod/dynPrompt/SEED_dd_mm_yyyy.txt when dynamic is enabled."}),
-            }
+                "model_in": ("MODEL", {}),
+                "clip_in": ("CLIP", {}),
+                "vae_in": ("VAE", {}),
+                # --- Prompts --- (controlled dynamic expansion inside node for determinism)
+                "positive_prompt": (
+                    "STRING",
+                    {"multiline": True, "default": "", "dynamicPrompts": False},
+                ),
+                "negative_prompt": (
+                    "STRING",
+                    {"multiline": True, "default": "", "dynamicPrompts": False},
+                ),
+                # Optional external conditioning (bypass internal text encode)
+                "positive_in": ("CONDITIONING", {}),
+                "negative_in": ("CONDITIONING", {}),
+                # --- CLIP Layers ---
+                "clip_set_last_layer_positive": (
+                    "INT",
+                    {"default": -2, "min": -20, "max": 0},
+                ),
+                "clip_set_last_layer_negative": (
+                    "INT",
+                    {"default": -2, "min": -20, "max": 0},
+                ),
+                # --- Recipes ---
+                "recipe_slot": (
+                    ["Off", "Slot 1", "Slot 2", "Slot 3", "Slot 4"],
+                    {
+                        "default": "Off",
+                        "tooltip": "Choose slot to save/load assembled setup.",
+                    },
+                ),
+                "recipe_save": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Save current setup into the selected slot.",
+                    },
+                ),
+                "recipe_use": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Load and apply setup from the selected slot for this run.",
+                    },
+                ),
+                # --- Standard pipeline (match classic node order for CLIP) ---
+                "standard_pipeline": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Use vanilla order for CLIP: Set Last Layer -> Load LoRA -> Encode (same CLIP logic as standard ComfyUI).",
+                    },
+                ),
+                # CLIP LoRA gains per branch (effective only when standard_pipeline=true)
+                "clip_lora_pos_gain": (
+                    "FLOAT",
+                    {
+                        "default": 1.0,
+                        "min": 0.0,
+                        "max": 3.0,
+                        "step": 0.01,
+                        "tooltip": "Multiplier for CLIP-LoRA strength on positive branch (standard pipeline).",
+                    },
+                ),
+                "clip_lora_neg_gain": (
+                    "FLOAT",
+                    {
+                        "default": 1.0,
+                        "min": 0.0,
+                        "max": 3.0,
+                        "step": 0.01,
+                        "tooltip": "Multiplier for CLIP-LoRA strength on negative branch (standard pipeline).",
+                    },
+                ),
+                # Deterministic dynamic prompts
+                "dynamic_pos": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Deterministically expand choices in positive prompt (uses dyn_seed).",
+                    },
+                ),
+                "dynamic_neg": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Deterministically expand choices in negative prompt (uses dyn_seed).",
+                    },
+                ),
+                "dyn_seed": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "max": 0xFFFFFFFF,
+                        "tooltip": "Seed for dynamic prompt expansion (same seed used for both prompts).",
+                    },
+                ),
+                "dynamic_break_freeze": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "tooltip": "If enabled, do not expand choices before the first |BREAK| marker; dynamic applies only after it.",
+                    },
+                ),
+                "show_expanded_prompts": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Print expanded Positive/Negative prompts to console when dynamic is enabled.",
+                    },
+                ),
+                "save_expanded_prompts": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": "Save expanded prompts to mod/dynPrompt/SEED_dd_mm_yyyy.txt when dynamic is enabled.",
+                    },
+                ),
+            },
         }
-
 
     RETURN_TYPES = ("MODEL", "CLIP", "CONDITIONING", "CONDITIONING", "VAE")
     RETURN_NAMES = ("MODEL", "CLIP", "Positive", "Negative", "VAE")
-    #RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING", "VAE")
-    #RETURN_NAMES = ("MODEL", "Positive", "Negative", "VAE")
+    # RETURN_TYPES = ("MODEL", "CONDITIONING", "CONDITIONING", "VAE")
+    # RETURN_NAMES = ("MODEL", "Positive", "Negative", "VAE")
     FUNCTION = "apply_magic_node"
     CATEGORY = "MagicNodes"
 
-    def apply_magic_node(self, model_in=None, clip_in=None, checkpoint=None,
-                     use_checkpoint=True, clear_cache=False,
-                     use_lora_1=True, lora_1=None, strength_model_1=1.0, strength_clip_1=1.0,
-                     use_lora_2=False, lora_2=None, strength_model_2=0.0, strength_clip_2=0.0,
-                     use_lora_3=False, lora_3=None, strength_model_3=0.0, strength_clip_3=0.0,
-                     use_lora_4=False, lora_4=None, strength_model_4=0.0, strength_clip_4=0.0,
-                     use_lora_5=False, lora_5=None, strength_model_5=0.0, strength_clip_5=0.0,
-                     use_lora_6=False, lora_6=None, strength_model_6=0.0, strength_clip_6=0.0,
-                     positive_prompt="", negative_prompt="",
-                     clip_set_last_layer_positive=-2, clip_set_last_layer_negative=-2,
-                     vae_in=None,
-                     recipe_slot="Off", recipe_save=False, recipe_use=False,
-                     standard_pipeline=False,
-                     clip_lora_pos_gain=1.0, clip_lora_neg_gain=1.0,
-                     positive_in=None, negative_in=None,
-                     dynamic_pos=False, dynamic_neg=False, dyn_seed=0, dynamic_break_freeze=True,
-                     show_expanded_prompts=False, save_expanded_prompts=False):
+    def apply_magic_node(
+        self,
+        model_in=None,
+        clip_in=None,
+        checkpoint=None,
+        use_checkpoint=True,
+        clear_cache=False,
+        use_lora_1=True,
+        lora_1=None,
+        strength_model_1=1.0,
+        strength_clip_1=1.0,
+        use_lora_2=False,
+        lora_2=None,
+        strength_model_2=0.0,
+        strength_clip_2=0.0,
+        use_lora_3=False,
+        lora_3=None,
+        strength_model_3=0.0,
+        strength_clip_3=0.0,
+        use_lora_4=False,
+        lora_4=None,
+        strength_model_4=0.0,
+        strength_clip_4=0.0,
+        use_lora_5=False,
+        lora_5=None,
+        strength_model_5=0.0,
+        strength_clip_5=0.0,
+        use_lora_6=False,
+        lora_6=None,
+        strength_model_6=0.0,
+        strength_clip_6=0.0,
+        positive_prompt="",
+        negative_prompt="",
+        clip_set_last_layer_positive=-2,
+        clip_set_last_layer_negative=-2,
+        vae_in=None,
+        recipe_slot="Off",
+        recipe_save=False,
+        recipe_use=False,
+        standard_pipeline=False,
+        clip_lora_pos_gain=1.0,
+        clip_lora_neg_gain=1.0,
+        positive_in=None,
+        negative_in=None,
+        dynamic_pos=False,
+        dynamic_neg=False,
+        dyn_seed=0,
+        dynamic_break_freeze=True,
+        show_expanded_prompts=False,
+        save_expanded_prompts=False,
+    ):
 
         global _loaded_checkpoint
 
@@ -183,21 +383,21 @@ class MagicNodesCombiNode:
         _checkpoint_cache.clear()
         if clear_cache:
             _lora_cache.clear()
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+        clear_gpu_and_ram_cache()
 
         # Recipe helpers
         def _recipes_path():
             base = os.path.join(os.path.dirname(__file__), "state")
             os.makedirs(base, exist_ok=True)
             return os.path.join(base, "combinode_recipes.json")
+
         def _recipes_load():
             try:
                 with open(_recipes_path(), "r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception:
                 return {}
+
         def _recipes_save(data: dict):
             try:
                 with open(_recipes_path(), "w", encoding="utf-8") as f:
@@ -206,15 +406,21 @@ class MagicNodesCombiNode:
                 pass
 
         # Apply recipe if requested
-        slot_idx = {"Off": 0, "Slot 1": 1, "Slot 2": 2, "Slot 3": 3, "Slot 4": 4}.get(str(recipe_slot), 0)
+        slot_idx = {"Off": 0, "Slot 1": 1, "Slot 2": 2, "Slot 3": 3, "Slot 4": 4}.get(
+            str(recipe_slot), 0
+        )
         if slot_idx and bool(recipe_use):
             rec = _recipes_load().get(str(slot_idx), None)
             if rec is not None:
                 try:
                     use_checkpoint = rec.get("use_checkpoint", use_checkpoint)
                     checkpoint = rec.get("checkpoint", checkpoint)
-                    clip_set_last_layer_positive = rec.get("clip_pos", clip_set_last_layer_positive)
-                    clip_set_last_layer_negative = rec.get("clip_neg", clip_set_last_layer_negative)
+                    clip_set_last_layer_positive = rec.get(
+                        "clip_pos", clip_set_last_layer_positive
+                    )
+                    clip_set_last_layer_negative = rec.get(
+                        "clip_neg", clip_set_last_layer_negative
+                    )
                     positive_prompt = rec.get("pos_text", positive_prompt)
                     negative_prompt = rec.get("neg_text", negative_prompt)
                     rls = rec.get("loras", [])
@@ -242,27 +448,37 @@ class MagicNodesCombiNode:
             return s2.strip()
 
         # Deterministic dynamic prompt expansion: supports {...}, (...), [...] with '|' choices
-        def _expand_dynamic(text: str, seed_val: int, freeze_before_break: bool = True) -> str:
-            if not isinstance(text, str) or (text.find('|') < 0):
+        def _expand_dynamic(
+            text: str, seed_val: int, freeze_before_break: bool = True
+        ) -> str:
+            if not isinstance(text, str) or (text.find("|") < 0):
                 return text
             # Honor |BREAK|: keep first segment intact when requested
-            if freeze_before_break and ('|BREAK|' in text):
-                pre, post = text.split('|BREAK|', 1)
-                return pre + '|BREAK|' + _expand_dynamic(post, seed_val, freeze_before_break=False)
+            if freeze_before_break and ("|BREAK|" in text):
+                pre, post = text.split("|BREAK|", 1)
+                return (
+                    pre
+                    + "|BREAK|"
+                    + _expand_dynamic(post, seed_val, freeze_before_break=False)
+                )
             rng = random.Random(int(seed_val) & 0xFFFFFFFF)
+
             def _expand_pattern(t: str, pat: re.Pattern) -> str:
                 prev = None
                 cur = t
                 while prev != cur:
                     prev = cur
+
                     def repl(m):
                         body = m.group(1)
-                        choices = [c.strip() for c in body.split('|') if c.strip()]
+                        choices = [c.strip() for c in body.split("|") if c.strip()]
                         if not choices:
                             return m.group(0)
                         return rng.choice(choices)
+
                     cur = pat.sub(repl, cur)
                 return cur
+
             for rx in (
                 re.compile(r"\{([^{}]+)\}"),
                 re.compile(r"\(([^()]+)\)"),
@@ -272,16 +488,28 @@ class MagicNodesCombiNode:
             return text
 
         # Precompute expanded (or original) texts once
-        pos_text_expanded = _norm_prompt(_expand_dynamic(positive_prompt, int(dyn_seed), bool(dynamic_break_freeze)) if bool(dynamic_pos) else positive_prompt)
-        neg_text_expanded = _norm_prompt(_expand_dynamic(negative_prompt, int(dyn_seed), bool(dynamic_break_freeze)) if bool(dynamic_neg) else negative_prompt)
+        pos_text_expanded = _norm_prompt(
+            _expand_dynamic(positive_prompt, int(dyn_seed), bool(dynamic_break_freeze))
+            if bool(dynamic_pos)
+            else positive_prompt
+        )
+        neg_text_expanded = _norm_prompt(
+            _expand_dynamic(negative_prompt, int(dyn_seed), bool(dynamic_break_freeze))
+            if bool(dynamic_neg)
+            else negative_prompt
+        )
 
         if use_checkpoint and checkpoint:
-            checkpoint_path = folder_paths.get_full_path_or_raise("checkpoints", checkpoint)
+            checkpoint_path = folder_paths.get_full_path_or_raise(
+                "checkpoints", checkpoint
+            )
             _unload_old_checkpoint(checkpoint_path)
             base_model, base_clip, vae = _load_checkpoint(checkpoint_path)
             model = base_model.clone()
             clip = base_clip.clone()
-            clip_clean = base_clip.clone()  # keep pristine CLIP for standard pipeline path
+            clip_clean = (
+                base_clip.clone()
+            )  # keep pristine CLIP for standard pipeline path
 
         elif model_in and clip_in:
             _unload_old_checkpoint(None)
@@ -331,7 +559,9 @@ class MagicNodesCombiNode:
                 _lora_cache[lora_path] = lora_file
             lora_stack.append((lora_file, float(sc), float(sm)))
             sc_apply = 0.0 if defer_clip else sc
-            model, clip = comfy.sd.load_lora_for_models(model, clip, lora_file, sm, sc_apply)
+            model, clip = comfy.sd.load_lora_for_models(
+                model, clip, lora_file, sm, sc_apply
+            )
 
         _clear_unused_loras(active_lora_paths)
         # Warn about duplicate LoRA selections across slots
@@ -341,7 +571,9 @@ class MagicNodesCombiNode:
                 counts[p] = counts.get(p, 0) + 1
             dups = [p for p, c in counts.items() if c > 1]
             if dups:
-                print(f"[CombiNode] Duplicate LoRA detected across slots: {len(dups)} file(s).")
+                print(
+                    f"[CombiNode] Duplicate LoRA detected across slots: {len(dups)} file(s)."
+                )
         except Exception:
             pass
 
@@ -352,16 +584,24 @@ class MagicNodesCombiNode:
 
         pos_gain = float(clip_lora_pos_gain)
         neg_gain = float(clip_lora_neg_gain)
-        skips_equal = int(clip_set_last_layer_positive) == int(clip_set_last_layer_negative)
+        skips_equal = int(clip_set_last_layer_positive) == int(
+            clip_set_last_layer_negative
+        )
         # Use shared CLIP only if gains are equal and skips equal
-        use_shared = bool(standard_pipeline) and skips_equal and (abs(pos_gain - neg_gain) < 1e-6)
+        use_shared = (
+            bool(standard_pipeline)
+            and skips_equal
+            and (abs(pos_gain - neg_gain) < 1e-6)
+        )
 
         if (positive_in is None) and (negative_in is None) and use_shared:
             shared_clip = src_clip.clone()
             shared_clip.clip_layer(clip_set_last_layer_positive)
             for lora_file, sc, sm in lora_stack:
                 try:
-                    _m_unused, shared_clip = comfy.sd.load_lora_for_models(model, shared_clip, lora_file, 0.0, sc * pos_gain)
+                    _m_unused, shared_clip = comfy.sd.load_lora_for_models(
+                        model, shared_clip, lora_file, 0.0, sc * pos_gain
+                    )
                 except Exception:
                     pass
             tokens_pos = shared_clip.tokenize(pos_text_expanded)
@@ -375,7 +615,9 @@ class MagicNodesCombiNode:
             if bool(standard_pipeline):
                 for lora_file, sc, sm in lora_stack:
                     try:
-                        _m_unused, clip_pos = comfy.sd.load_lora_for_models(model, clip_pos, lora_file, 0.0, sc * pos_gain)
+                        _m_unused, clip_pos = comfy.sd.load_lora_for_models(
+                            model, clip_pos, lora_file, 0.0, sc * pos_gain
+                        )
                     except Exception:
                         pass
             if positive_in is not None:
@@ -390,7 +632,9 @@ class MagicNodesCombiNode:
             if bool(standard_pipeline):
                 for lora_file, sc, sm in lora_stack:
                     try:
-                        _m_unused, clip_neg = comfy.sd.load_lora_for_models(model, clip_neg, lora_file, 0.0, sc * neg_gain)
+                        _m_unused, clip_neg = comfy.sd.load_lora_for_models(
+                            model, clip_neg, lora_file, 0.0, sc * neg_gain
+                        )
                     except Exception:
                         pass
             if negative_in is not None:
@@ -406,11 +650,20 @@ class MagicNodesCombiNode:
             if bool(show_expanded_prompts):
                 try:
                     print(f"[CombiNode] Expanded prompts (dyn_seed={int(dyn_seed)}):")
+
                     def _print_block(name, src, expanded):
                         print(name + ":")
-                        if bool(dynamic_break_freeze) and ('|BREAK|' in src) and ((name=="Positive" and bool(dynamic_pos)) or (name=="Negative" and bool(dynamic_neg))):
+                        if (
+                            bool(dynamic_break_freeze)
+                            and ("|BREAK|" in src)
+                            and (
+                                (name == "Positive" and bool(dynamic_pos))
+                                or (name == "Negative" and bool(dynamic_neg))
+                            )
+                        ):
                             print("  static")
                         print("  " + expanded)
+
                     _print_block("Positive", positive_prompt, pos_text_expanded)
                     _print_block("Negative", negative_prompt, neg_text_expanded)
                 except Exception:
@@ -421,17 +674,28 @@ class MagicNodesCombiNode:
                     base = os.path.join(os.path.dirname(__file__), "dynPrompt")
                     os.makedirs(base, exist_ok=True)
                     now = datetime.now()
-                    fname = f"{int(dyn_seed)}_{now.day:02d}_{now.month:02d}_{now.year}.txt"
+                    fname = (
+                        f"{int(dyn_seed)}_{now.day:02d}_{now.month:02d}_{now.year}.txt"
+                    )
                     path = os.path.join(base, fname)
                     lines = []
+
                     def _append_block(name, src, expanded):
                         lines.append(name + ":\n")
-                        if bool(dynamic_break_freeze) and ('|BREAK|' in src) and ((name=="Positive" and bool(dynamic_pos)) or (name=="Negative" and bool(dynamic_neg))):
+                        if (
+                            bool(dynamic_break_freeze)
+                            and ("|BREAK|" in src)
+                            and (
+                                (name == "Positive" and bool(dynamic_pos))
+                                or (name == "Negative" and bool(dynamic_neg))
+                            )
+                        ):
                             lines.append("static\n")
                         lines.append(expanded + "\n\n")
+
                     _append_block("Positive", positive_prompt, pos_text_expanded)
                     _append_block("Negative", negative_prompt, neg_text_expanded)
-                    with open(path, 'w', encoding='utf-8') as f:
+                    with open(path, "w", encoding="utf-8") as f:
                         f.writelines(lines)
                 except Exception:
                     pass
@@ -447,20 +711,52 @@ class MagicNodesCombiNode:
                 "pos_text": str(positive_prompt),
                 "neg_text": str(negative_prompt),
                 "loras": [
-                    [bool(use_lora_1), lora_1, float(strength_model_1), float(strength_clip_1)],
-                    [bool(use_lora_2), lora_2, float(strength_model_2), float(strength_clip_2)],
-                    [bool(use_lora_3), lora_3, float(strength_model_3), float(strength_clip_3)],
-                    [bool(use_lora_4), lora_4, float(strength_model_4), float(strength_clip_4)],
-                    [bool(use_lora_5), lora_5, float(strength_model_5), float(strength_clip_5)],
-                    [bool(use_lora_6), lora_6, float(strength_model_6), float(strength_clip_6)],
+                    [
+                        bool(use_lora_1),
+                        lora_1,
+                        float(strength_model_1),
+                        float(strength_clip_1),
+                    ],
+                    [
+                        bool(use_lora_2),
+                        lora_2,
+                        float(strength_model_2),
+                        float(strength_clip_2),
+                    ],
+                    [
+                        bool(use_lora_3),
+                        lora_3,
+                        float(strength_model_3),
+                        float(strength_clip_3),
+                    ],
+                    [
+                        bool(use_lora_4),
+                        lora_4,
+                        float(strength_model_4),
+                        float(strength_clip_4),
+                    ],
+                    [
+                        bool(use_lora_5),
+                        lora_5,
+                        float(strength_model_5),
+                        float(strength_clip_5),
+                    ],
+                    [
+                        bool(use_lora_6),
+                        lora_6,
+                        float(strength_model_6),
+                        float(strength_clip_6),
+                    ],
                 ],
             }
             _recipes_save(data)
             print(f"[CombiNode] Saved recipe Slot {slot_idx}.")
 
         # Return the CLIP instance consistent with encoding path
-        return (model, src_clip if bool(standard_pipeline) else clip, cond_pos, cond_neg, vae)
-
-
-
-
+        return (
+            model,
+            src_clip if bool(standard_pipeline) else clip,
+            cond_pos,
+            cond_neg,
+            vae,
+        )

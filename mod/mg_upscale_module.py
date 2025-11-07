@@ -4,12 +4,7 @@ import gc
 import logging
 import comfy.model_management as model_management
 
-
-def clear_gpu_and_ram_cache():
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
+from .mg_utils import clear_gpu_and_ram_cache
 
 
 def _smart_decode(vae, latent, tile_size=512):
@@ -25,12 +20,13 @@ def _smart_decode(vae, latent, tile_size=512):
             overlap=(tile_size // 4) // compression,
         )
     if len(images.shape) == 5:
-        images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
+        images = images.reshape(
+            -1, images.shape[-3], images.shape[-2], images.shape[-1]
+        )
     return images
 
 
-class MagicUpscaleModule:
-    """Moved into mod/ as mg_upscale_module keeping class/key name."""
+class MG_UpscaleModule:
     upscale_methods = ["nearest-exact", "bilinear", "area", "bicubic", "lanczos"]
 
     @classmethod
@@ -40,14 +36,17 @@ class MagicUpscaleModule:
                 "samples": ("LATENT", {}),
                 "vae": ("VAE", {}),
                 "upscale_method": (cls.upscale_methods, {"default": "bilinear"}),
-                "scale_by": ("FLOAT", {"default": 1.2, "min": 0.01, "max": 8.0, "step": 0.01}),
+                "scale_by": (
+                    "FLOAT",
+                    {"default": 1.2, "min": 0.01, "max": 8.0, "step": 0.01},
+                ),
             }
         }
 
     RETURN_TYPES = ("LATENT", "IMAGE")
     RETURN_NAMES = ("LATENT", "Upscaled Image")
     FUNCTION = "process_upscale"
-    CATEGORY = "MagicNodes"
+    CATEGORY = "MagicNodes/advanced"
 
     def process_upscale(self, samples, vae, upscale_method, scale_by):
         clear_gpu_and_ram_cache()
@@ -62,11 +61,15 @@ class MagicUpscaleModule:
             stride = 8
         if stride <= 0:
             stride = 8
+
         def _align_up(x, s):
             return int(((x + s - 1) // s) * s)
+
         width_al = _align_up(width, stride)
         height_al = _align_up(height, stride)
-        up = comfy.utils.common_upscale(samples_t, width_al, height_al, upscale_method, "disabled")
+        up = comfy.utils.common_upscale(
+            samples_t, width_al, height_al, upscale_method, "disabled"
+        )
         up = up.movedim(1, -1)
         encoded = vae.encode(up[:, :, :, :3])
         return ({"samples": encoded}, up)

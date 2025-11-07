@@ -1,20 +1,34 @@
 import os
 from typing import Dict, Tuple
+import torch
+import gc
+
 
 _CACHE: Dict[str, Tuple[float, Dict[str, Dict[str, object]]]] = {}
 
 _MSG_PREFIX = "[MagicNodes][Presets]"
 
+
+def clear_gpu_and_ram_cache():
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
+
 def _root_dir() -> str:
     # .../MagicNodes/mod/easy -> .../MagicNodes
-    return os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+    return os.path.dirname(os.path.dirname(__file__))
 
-def _pressets_dir() -> str:
-    return os.path.join(_root_dir(), "pressets")
+
+def _presets_dir() -> str:
+    return os.path.join(_root_dir(), "presets")
+
 
 def _cfg_path(kind: str) -> str:
     # kind examples: "mg_cade25", "mg_controlfusion"
-    return os.path.join(_pressets_dir(), f"{kind}.cfg")
+    return os.path.join(_presets_dir(), f"{kind}.cfg")
+
 
 def _parse_value(raw: str):
     s = raw.strip()
@@ -31,14 +45,19 @@ def _parse_value(raw: str):
         pass
     # variable substitution
     s = s.replace("$(ROOT)", _root_dir())
-    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+    if (s.startswith('"') and s.endswith('"')) or (
+        s.startswith("'") and s.endswith("'")
+    ):
         s = s[1:-1]
     return s
+
 
 def _load_kind(kind: str) -> Dict[str, Dict[str, object]]:
     path = _cfg_path(kind)
     if not os.path.isfile(path):
-        print(f"{_MSG_PREFIX} No configuration file for '{kind}' found; loaded defaults — results may be unpredictable!")
+        print(
+            f"{_MSG_PREFIX} No configuration file for '{kind}' found; loaded defaults — results may be unpredictable!"
+        )
         return {}
     try:
         mtime = os.path.getmtime(path)
@@ -59,26 +78,34 @@ def _load_kind(kind: str) -> Dict[str, Dict[str, object]]:
                     continue
                 if ":" in line:
                     if cur_section is None:
-                        print(f"{_MSG_PREFIX} Parse warning at line {ln}: key outside of any [section]; ignored")
+                        print(
+                            f"{_MSG_PREFIX} Parse warning at line {ln}: key outside of any [section]; ignored"
+                        )
                         continue
                     k, v = line.split(":", 1)
                     key = k.strip()
                     try:
                         val = _parse_value(v)
                     except Exception:
-                        print(f"{_MSG_PREFIX} Missing or invalid parameter '{key}'; this may affect results!")
+                        print(
+                            f"{_MSG_PREFIX} Missing or invalid parameter '{key}'; this may affect results!"
+                        )
                         continue
                     data[cur_section][key] = val
                 else:
                     print(f"{_MSG_PREFIX} Unknown line at {ln}: '{line}'; ignored")
 
         _CACHE[path] = (mtime, data)
+        print(data)
         return data
     except Exception as e:
-        print(f"{_MSG_PREFIX} Failed to read '{path}': {e}. Loaded defaults — results may be unpredictable!")
+        print(
+            f"{_MSG_PREFIX} Failed to read '{path}': {e}. Loaded defaults — results may be unpredictable!"
+        )
         return {}
 
-def get(kind: str, step: str) -> Dict[str, object]:
+
+def load_preset(kind: str, step: str) -> Dict[str, object]:
     """Return dict of parameters for a given kind and step.
     step accepts 'Step 1', '1', 'step1', case-insensitive.
     """
@@ -98,16 +125,23 @@ def get(kind: str, step: str) -> Dict[str, object]:
         # Suppress noisy log for missing 'Step 1' in mg_controlfusion.
         if kind == "mg_controlfusion" and key in ("step1", "1"):
             return {}
-        print(f"{_MSG_PREFIX} Preset step '{step}' not found for '{kind}'; using defaults")
+        print(
+            f"{_MSG_PREFIX} Preset step '{step}' not found for '{kind}'; using defaults"
+        )
         return {}
     res = dict(data[key])
     # Side-effect: when CADE presets are loaded, optionally enable KV pruning in attention
     try:
-        if kind == "mg_cade25":
-            from .. import mg_sagpu_attention as sa_patch  # local import to avoid cycles
+        if kind == "mg_cade":
+            from . import (
+                mg_sagpu_attention as sa_patch,
+            )  # local import to avoid cycles
+
             kv_enable = bool(res.get("kv_prune_enable", False))
             kv_keep = float(res.get("kv_keep", 0.85))
-            kv_min = int(res.get("kv_min_tokens", 128)) if "kv_min_tokens" in res else 128
+            kv_min = (
+                int(res.get("kv_min_tokens", 128)) if "kv_min_tokens" in res else 128
+            )
             if hasattr(sa_patch, "set_kv_prune"):
                 sa_patch.set_kv_prune(kv_enable, kv_keep, kv_min)
     except Exception:

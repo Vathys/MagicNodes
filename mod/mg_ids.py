@@ -5,6 +5,7 @@ import torch
 
 try:
     from scipy.ndimage import gaussian_filter as _scipy_gaussian_filter
+
     _HAVE_SCIPY = True
 except Exception:
     _HAVE_SCIPY = False
@@ -19,17 +20,25 @@ def _torch_gaussian_blur(image: torch.Tensor, sigma: float) -> torch.Tensor:
     radius = max(1, int(3.0 * float(sigma)))
     ksize = radius * 2 + 1
     x = torch.arange(-radius, radius + 1, device=device, dtype=dtype)
-    g1 = torch.exp(-(x * x) / (2.0 * (sigma ** 2)))
+    g1 = torch.exp(-(x * x) / (2.0 * (sigma**2)))
     g1 = (g1 / g1.sum()).view(1, 1, 1, -1)
     g2 = g1.transpose(2, 3)
     xch = image.movedim(-1, 1)  # BCHW
     pad = (radius, radius, radius, radius)
-    out = torch.nn.functional.conv2d(torch.nn.functional.pad(xch, pad, mode="reflect"), g1.repeat(xch.shape[1], 1, 1, 1), groups=xch.shape[1])
-    out = torch.nn.functional.conv2d(torch.nn.functional.pad(out, pad, mode="reflect"), g2.repeat(out.shape[1], 1, 1, 1), groups=out.shape[1])
+    out = torch.nn.functional.conv2d(
+        torch.nn.functional.pad(xch, pad, mode="reflect"),
+        g1.repeat(xch.shape[1], 1, 1, 1),
+        groups=xch.shape[1],
+    )
+    out = torch.nn.functional.conv2d(
+        torch.nn.functional.pad(out, pad, mode="reflect"),
+        g2.repeat(out.shape[1], 1, 1, 1),
+        groups=out.shape[1],
+    )
     return out.movedim(1, -1)
 
 
-class IntelligentDetailStabilizer:
+class MG_IntelligentDetailStabilizer:
     """Alias-preserving move of IDS into mod/ as mg_ids.py.
     Keeps class/key name for backward compatibility.
     """
@@ -49,7 +58,7 @@ class IntelligentDetailStabilizer:
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("IMAGE",)
     FUNCTION = "stabilize"
-    CATEGORY = "MagicNodes"
+    CATEGORY = "MagicNodes/advanced"
 
     def stabilize(self, image: torch.Tensor, ids_strength: float = 0.5):
         sigma = max(float(ids_strength) * 2.0, 1e-3)

@@ -33,3 +33,5 @@ temp_patch.diff
 
 # Node / front-end (if any submodules appear later)
 node_modules/
+
+state/** */

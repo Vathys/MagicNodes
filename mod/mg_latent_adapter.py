@@ -19,7 +19,7 @@ import torch.nn.functional as F
 import comfy.sample as _sample
 
 
-class MagicLatentAdapter:
+class MG_LatentAdapter:
     """Generate or adapt a LATENT to fit the target model's expectations."""
 
     @classmethod
@@ -29,13 +29,18 @@ class MagicLatentAdapter:
                 "model": ("MODEL", {}),
                 "mode": (["generate", "adapt"], {"default": "generate"}),
                 "family": (["auto", "SD", "SDXL", "FLUX"], {"default": "auto"}),
-
                 # Generation params (ignored in adapt mode)
                 "width": ("INT", {"default": 512, "min": 8, "max": 8192, "step": 8}),
                 "height": ("INT", {"default": 512, "min": 8, "max": 8192, "step": 8}),
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 64}),
-                "sigma": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.1}),
-                "bias": ("FLOAT", {"default": 0.0, "min": -10.0, "max": 10.0, "step": 0.1}),
+                "sigma": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.1},
+                ),
+                "bias": (
+                    "FLOAT",
+                    {"default": 0.0, "min": -10.0, "max": 10.0, "step": 0.1},
+                ),
                 "mix_image": ("BOOLEAN", {"default": False}),
             },
             "optional": {
@@ -84,7 +89,9 @@ class MagicLatentAdapter:
             return 4, 2
 
     @staticmethod
-    def _adapt_channels(model, z: torch.Tensor, preserve_zero: bool = False) -> torch.Tensor:
+    def _adapt_channels(
+        model, z: torch.Tensor, preserve_zero: bool = False
+    ) -> torch.Tensor:
         """Adapts channel count and dims to the model's latent_format.
         If preserve_zero and the latent is all zeros, pad with zeros instead of noise.
         """
@@ -134,7 +141,9 @@ class MagicLatentAdapter:
             return z
 
     @staticmethod
-    def _mix_image_into_latent(vae, image_bhwc: torch.Tensor, z: torch.Tensor) -> torch.Tensor:
+    def _mix_image_into_latent(
+        vae, image_bhwc: torch.Tensor, z: torch.Tensor
+    ) -> torch.Tensor:
         if vae is None or image_bhwc is None:
             return z
         try:
@@ -144,15 +153,17 @@ class MagicLatentAdapter:
             except Exception:
                 stride = 8
             h, w = image_bhwc.shape[1:3]
+
             def _align_up(x, s):
                 return int(((x + s - 1) // s) * s)
+
             Ht, Wt = _align_up(h, stride), _align_up(w, stride)
             x = image_bhwc
             if (Ht != h) or (Wt != w):
                 pad_h = Ht - h
                 pad_w = Wt - w
                 x_nchw = x.movedim(-1, 1)
-                x_nchw = F.pad(x_nchw, (0, pad_w, 0, pad_h), mode='replicate')
+                x_nchw = F.pad(x_nchw, (0, pad_w, 0, pad_h), mode="replicate")
                 x = x_nchw.movedim(1, -1)
             enc = vae.encode(x[:, :, :, :3])
             # If batch mismatches, use first encoding and tile
@@ -163,7 +174,9 @@ class MagicLatentAdapter:
                 if enc.ndim == 5 and enc.shape[2] == 1:
                     enc = enc.squeeze(2)
                 else:
-                    enc = enc[(slice(None), slice(None)) + (slice(0,1),) * (enc.ndim-2)]
+                    enc = enc[
+                        (slice(None), slice(None)) + (slice(0, 1),) * (enc.ndim - 2)
+                    ]
                     if enc.ndim == 5:
                         enc = enc.squeeze(2)
             if enc.shape[0] != z.shape[0]:
@@ -222,9 +235,13 @@ class MagicLatentAdapter:
         h8, w8 = max(1, height // stride), max(1, width // stride)
         target_c, target_dims = self._latent_format(model)
         if target_dims == 3:
-            z = torch.randn(batch_size, target_c, 1, h8, w8, device=device) * float(sigma) + float(bias)
+            z = torch.randn(batch_size, target_c, 1, h8, w8, device=device) * float(
+                sigma
+            ) + float(bias)
         else:
-            z = torch.randn(batch_size, target_c, h8, w8, device=device) * float(sigma) + float(bias)
+            z = torch.randn(batch_size, target_c, h8, w8, device=device) * float(
+                sigma
+            ) + float(bias)
         if mix_image and (vae is not None) and (image is not None):
             # image is BHWC 0..1
             img = image.to(device)
